@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>議事録生成ツール</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        #log { margin-top: 20px; }
+        .btn { margin: 5px; padding: 10px; }
+        .transcript { margin-top: 10px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>議事録生成ツール</h1>
+    <button id="start-btn" class="btn">録音開始</button>
+    <button id="stop-btn" class="btn" disabled>録音停止</button>
+    <button id="download-btn" class="btn" disabled>CSVダウンロード</button>
+    <div id="log"></div>
+    <div id="transcript-container"></div>
+
+    <script>
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const downloadBtn = document.getElementById('download-btn');
+        const logDiv = document.getElementById('log');
+        const transcriptContainer = document.getElementById('transcript-container');
+        
+        let recognition;
+        let isRecording = false;
+        let transcriptLog = [];
+
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+        } else if ('SpeechRecognition' in window) {
+            recognition = new SpeechRecognition();
+        } else {
+            alert("このブラウザはWeb Speech APIをサポートしていません。");
+        }
+
+        if (recognition) {
+            recognition.lang = 'ja-JP';
+            recognition.interimResults = true;
+            recognition.continuous = true;
+
+            recognition.onstart = () => {
+                isRecording = true;
+                logDiv.innerHTML += "<p>録音開始</p>";
+            };
+
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript.trim();
+                    if (event.results[i].isFinal) {
+                        const timestamp = new Date().toLocaleString();
+                        transcriptLog.push({ timestamp, transcript });
+                        logDiv.innerHTML += `<p>${timestamp}: ${transcript}</p>`;
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+                transcriptContainer.innerHTML = `<div class="transcript">${interimTranscript}</div>`;
+            };
+
+            recognition.onerror = (event) => {
+                logDiv.innerHTML += `<p>エラー: ${event.error}</p>`;
+                if (isRecording) {
+                    recognition.stop();
+                    recognition.start();
+                }
+            };
+
+            recognition.onend = () => {
+                if (isRecording) {
+                    recognition.start();
+                } else {
+                    logDiv.innerHTML += "<p>録音停止</p>";
+                    stopBtn.disabled = true;
+                    downloadBtn.disabled = false;
+                    transcriptContainer.innerHTML = '';
+                }
+            };
+        }
+
+        startBtn.addEventListener('click', () => {
+            if (!isRecording) {
+                isRecording = true;
+                recognition.start();
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            if (isRecording) {
+                isRecording = false;
+                recognition.stop();
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            const csvContent = "data:text/csv;charset=utf-8,"
+                + transcriptLog.map(e => `${e.timestamp},${e.transcript}`).join("\n");
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "transcript.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    </script>
+</body>
+</html>
